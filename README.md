@@ -65,6 +65,7 @@ Server sẽ khởi chạy tại địa chỉ: **http://127.0.0.1:8000**
 - `requirements.txt`: Danh sách các thư viện cần cài đặt.
 - `.gitignore`: File cấu hình loại bỏ các file không đưa lên Git.
 
-## Link Video Demo
-*(Vui lòng điền đường dẫn tới video demo của bạn tại đây)*
-- **Demo Link:** [https://youtube.com/watch?v=...](https://youtube.com/watch?v=...)
+## Video demo
+https://github.com/user-attachments/assets/b0e40f40-a83b-4dfe-b909-824b32cca032
+
+
