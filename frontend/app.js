@@ -148,6 +148,192 @@ function setupUI(auth, provider) {
             console.error("Error adding note", e);
         }
     };
+
+    // --- Confessions Logic ---
+    let hasConfessionPassword = false;
+
+    window.switchTab = async (tab) => {
+        const notesSection = document.getElementById('notes-section');
+        const confessionsSection = document.getElementById('confessions-section');
+        const tabNotes = document.getElementById('tab-notes');
+        const tabConfessions = document.getElementById('tab-confessions');
+
+        if (tab === 'notes') {
+            notesSection.classList.remove('hidden');
+            confessionsSection.classList.add('hidden');
+            tabNotes.classList.add('active');
+            tabConfessions.classList.remove('active');
+        } else {
+            notesSection.classList.add('hidden');
+            confessionsSection.classList.remove('hidden');
+            tabNotes.classList.remove('active');
+            tabConfessions.classList.add('active');
+            
+            // Check password status
+            checkConfessionStatus();
+        }
+    };
+
+    async function checkConfessionStatus() {
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}/confessions/status`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const data = await res.json();
+            hasConfessionPassword = data.has_password;
+            
+            document.getElementById('confessions-chat').classList.add('hidden');
+            document.getElementById('confessions-auth').classList.remove('hidden');
+            document.getElementById('confessions-password').value = '';
+            document.getElementById('confessions-auth-msg').innerText = '';
+            
+            if (hasConfessionPassword) {
+                document.getElementById('confessions-auth-title').innerText = 'Nhập mật khẩu để vào Tâm sự';
+                document.getElementById('confessions-auth-btn').innerText = 'Mở khóa';
+                document.getElementById('confessions-reset-btn').style.display = 'block';
+            } else {
+                document.getElementById('confessions-auth-title').innerText = 'Tạo mật khẩu cho mục Tâm sự (Lần đầu)';
+                document.getElementById('confessions-auth-btn').innerText = 'Tạo mật khẩu';
+                document.getElementById('confessions-reset-btn').style.display = 'none';
+            }
+        } catch (e) {
+            console.error("Error checking confession status", e);
+        }
+    }
+
+    window.submitConfessionAuth = async () => {
+        const password = document.getElementById('confessions-password').value;
+        if (!password) return;
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const endpoint = hasConfessionPassword ? '/confessions/verify' : '/confessions/password';
+            
+            const res = await fetch(`${API_URL}${endpoint}`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ password })
+            });
+
+            if (res.ok) {
+                document.getElementById('confessions-auth').classList.add('hidden');
+                document.getElementById('confessions-chat').classList.remove('hidden');
+                loadChatHistory();
+            } else {
+                const errorData = await res.json();
+                document.getElementById('confessions-auth-msg').innerText = errorData.detail || "Đã có lỗi xảy ra";
+            }
+        } catch (e) {
+            console.error("Auth error", e);
+        }
+    };
+
+    window.resetConfessionPassword = async () => {
+        const newPassword = prompt("Nhập mật khẩu mới (Lưu ý: Mọi lịch sử tâm sự sẽ bị xóa):");
+        if (!newPassword) return;
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}/confessions/reset`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ password: newPassword })
+            });
+
+            if (res.ok) {
+                alert("Đã reset mật khẩu và xóa lịch sử chat.");
+                checkConfessionStatus();
+            } else {
+                alert("Lỗi khi reset mật khẩu");
+            }
+        } catch (e) {
+            console.error("Reset error", e);
+        }
+    };
+
+    async function loadChatHistory() {
+        const chatHistoryDiv = document.getElementById('chat-history');
+        chatHistoryDiv.innerHTML = '<div style="text-align:center; color:gray;">Đang tải...</div>';
+        
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}/confessions/chat`, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            const chats = await res.json();
+            
+            chatHistoryDiv.innerHTML = '';
+            chats.forEach(chat => {
+                appendMessage('user', chat.user_message);
+                appendMessage('ai', chat.ai_message);
+            });
+            scrollToBottom();
+        } catch (e) {
+            console.error("Error loading chat", e);
+            chatHistoryDiv.innerHTML = '<div style="color:red;">Lỗi tải tin nhắn.</div>';
+        }
+    }
+
+    function appendMessage(role, text) {
+        const chatHistoryDiv = document.getElementById('chat-history');
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `chat-msg ${role}`;
+        msgDiv.innerText = text;
+        chatHistoryDiv.appendChild(msgDiv);
+        scrollToBottom();
+    }
+
+    function scrollToBottom() {
+        const chatHistoryDiv = document.getElementById('chat-history');
+        chatHistoryDiv.scrollTop = chatHistoryDiv.scrollHeight;
+    }
+
+    window.sendChatMessage = async () => {
+        const input = document.getElementById('chat-message');
+        const message = input.value.trim();
+        if (!message) return;
+
+        appendMessage('user', message);
+        input.value = '';
+        
+        const typingDiv = document.createElement('div');
+        typingDiv.className = 'chat-msg ai typing-indicator';
+        typingDiv.innerText = 'Đợi tôi một tí nha...';
+        document.getElementById('chat-history').appendChild(typingDiv);
+        scrollToBottom();
+
+        try {
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch(`${API_URL}/confessions/chat`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ message })
+            });
+            
+            typingDiv.remove();
+            
+            if (res.ok) {
+                const data = await res.json();
+                appendMessage('ai', data.reply);
+            } else {
+                appendMessage('ai', 'Xin lỗi, tôi đang gặp trục trặc kỹ thuật.');
+            }
+        } catch (e) {
+            console.error("Chat error", e);
+            typingDiv.remove();
+            appendMessage('ai', 'Lỗi kết nối.');
+        }
+    };
 }
 
 // Start the app

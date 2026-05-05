@@ -5,9 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
-from backend.routers import notes
+from backend.routers import notes, confessions
 
 load_dotenv()
+
 
 app = FastAPI(title="Simple Note App")
 
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(notes.router)
+app.include_router(confessions.router)
 
 @app.get("/health")
 def health_check():
